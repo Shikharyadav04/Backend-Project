@@ -3,7 +3,26 @@ import {ApiError} from '../utils/ApiError.js'
 import {User} from '../models/user.models.js'
 import {uploadonCloudinary} from '../utils/cloudinary.js'
 import {ApiResponse} from '../utils/ApiResponse.js'
-import mongoose from 'mongoose'
+import mongoose from 'mongoose';
+
+const generateAccessAndRefreshTokens = async(userId) => {
+    try {
+        const user = await User.findById(userId) ;
+        const accessToken =  user.generateAccessToken() ;
+        const refreshToken = user.generateRefreshToken() ;
+        
+        user.refreshToken = refreshToken ;
+        await user.save({validateBeforeSave : false})
+        
+        
+        
+        return {accessToken,refreshToken}
+    } catch (error) {
+        throw new ApiError(500,"something went wrong while generating access and refresh tokens")
+    }
+}
+
+
 const registerUser = asyncHandler(async (req,res) => {
     //get user data  from frontend
     //check for validation 
@@ -75,81 +94,81 @@ const registerUser = asyncHandler(async (req,res) => {
 
 })
 
-const generateAcessAndRefreshTokens = async(userId) => {
-    try {
-        const user = await User.findById(userId) ;
-        const acessToken =  user.generateAcessToken() ;
-        const refreshToken = user.generateRefreshToken() ;
-        
-        user.refreshToken = refreshToken ;
-        await user.save({validateBeforeSave : false})
-        
-        
-        
-        return {acessToken,refreshToken}
-    } catch (error) {
-        throw new ApiError(500,"something went wrong while generating access and refresh tokens")
-    }
-}
-
-const loginUser = asyncHandler(async (req,res) => {
-    // req body => data 
-    //username or email validate 
-    // find user
-    //password check
-    //generate refresh and acess token
-    //send cookie
-
-    const {email,username,fullName,password} = req.body
 
 
-    if(!username || !email ){
-        throw new ApiError(400,"username or email is required")
+const loginUser = asyncHandler(async (req, res) => {
+    // Extract login data from the request body
+    const { email, username, password } = req.body;
+
+    // Check if either username or email is provided
+    if (!username && !email) {
+        throw new ApiError(400, "Username or email is required");
     }
 
+    // Find the user by username or email
     const user = await User.findOne({
-        $or : [{username} , {email}]
-    })
+        $or: [{ username }, { email }]
+    });
 
-    if(!user){
-        throw new ApiError(404,"user does not exist")
+    // Check if the user exists
+    if (!user) {
+        throw new ApiError(404, "User does not exist");
     }
 
-    const isPasswordCorrect = await user.isPasswordCorrect(password)
-
-    if(!isPasswordCorrect){
-        return new ApiError(404,"password is incorrect")
+    // Validate the password
+    const isPasswordValid = await user.isPasswordCorrect(password);
+    if (!isPasswordValid) {
+        throw new ApiError(400, "Password is incorrect");
     }
 
-    const {acessToken,refreshToken} = await generateAcessAndRefreshTokens(user._id)
+    // Generate access and refresh tokens
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
+    console.log("Access Token:", accessToken);
 
+    // Retrieve the logged-in user data without password and refreshToken
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
 
-    const loggedInUser = User.findById(user._id).select("-password -refreshToken")
+    // Cookie options
+    const cookieOptions = {
+        httpOnly: true, // Prevents client-side access to cookies (security)
+        secure: true, // Only send over HTTPS in production
+        sameSite: 'Strict', // Prevents CSRF (strict mode)
+        maxAge: 24 * 60 * 60 * 1000 // Cookie expires in 1 day
+    };
 
-    const options = {
-        httpOnly : true,
-        secure : true
-    }
+    // Set cookies for accessToken and refreshToken
+    res.cookie("accessToken", accessToken, cookieOptions);
+    res.cookie("refreshToken", refreshToken, cookieOptions);
 
-    return res
-    .status(200)
-    .cookie("accessToken",options)
-    .cookie("refreshToken",options)
-    .json(
-        new ApiResponse(
-            200,
-            {
-                user : loggedInUser , accessToken,refreshToken
-            },
-            "user logged in sucessfully"
-
-        )
-     )  
-
-
-
-
+    // Send response back to the client
+    // Set the cookies in the response
+return res
+.status(200)
+.cookie("accessToken", accessToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production', // Ensure this is set based on your environment
+    sameSite: 'None', // Use None if making cross-origin requests
+    path: '/', // Specify the path
 })
+.cookie("refreshToken", refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'None',
+    path: '/',
+})
+.json(
+    new ApiResponse(
+        200,
+        {
+            user: loggedInUser,
+            accessToken, // Optionally include in the response
+            refreshToken, // Optionally include in the response
+        },
+        "user logged in successfully"
+    )
+);
+
+});
 
 
 const logoutUser = asyncHandler(async (req,res) =>{
