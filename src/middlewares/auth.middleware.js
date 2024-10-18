@@ -9,8 +9,8 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
         let token = req.cookies?.accessToken || req.header("Authorization");
 
         // Log the extracted token to debug token reception
-        console.log("Extracted Token from Cookies: ", req.cookies?.accessToken);
-        console.log("Extracted Token from Headers: ", req.header("Authorization"));
+        // // console.log("Extracted Token from Cookies: ", req.cookies?.accessToken);
+        // // console.log("Extracted Token from Headers: ", req.header("Authorization"));
 
         // If token is from Authorization header, remove the 'Bearer ' prefix
         if (typeof token === "string" && token.startsWith("Bearer ")) {
@@ -18,7 +18,7 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
         }
 
         // Log the final token to debug its value
-        console.log("Final Token: ", token);
+        // console.log("Final Token: ", token);
 
         // Check if token is valid
         if (!token || typeof token !== "string") {
@@ -27,7 +27,7 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
 
         // Verify JWT and decode the token
         const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
-        console.log("Decoded Token: ", decodedToken);
+        // console.log("Decoded Token: ", decodedToken);
 
         // Find the user in the database using decoded token ID
         const user = await User.findById(decodedToken._id).select("-password -refreshToken");
@@ -43,7 +43,7 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
         // Proceed to the next middleware
         next();
     } catch (error) {
-        console.error("Error during JWT verification:", error);
+        // console.error("Error during JWT verification:", error);
         // Handle specific JWT verification errors (e.g., token expired)
         throw new ApiError(401, error.message || "Invalid access token");
     }
